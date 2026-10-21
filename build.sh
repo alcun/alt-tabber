@@ -5,12 +5,14 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-swift build -c release
+# Universal: runs on Apple silicon and Intel.
+swift build -c release --arch arm64 --arch x86_64
 app=build/AltTabber.app
 rm -rf "$app"
-mkdir -p "$app/Contents/MacOS"
-cp .build/release/AltTabber "$app/Contents/MacOS/AltTabber"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+cp .build/apple/Products/Release/AltTabber "$app/Contents/MacOS/AltTabber"
 cp Info.plist "$app/Contents/Info.plist"
+cp Resources/AppIcon.icns "$app/Contents/Resources/"
 codesign --force --options runtime --timestamp=none --sign "${SIGN_ID:--}" "$app"
 
 [[ "${1:-}" == "--no-install" ]] && { echo "Built $app"; exit 0; }

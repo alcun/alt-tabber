@@ -14,8 +14,15 @@ final class Hotkey {
     private static let tab: Int64 = 48, escape: Int64 = 53, enter: Int64 = 36, delete: Int64 = 51
     private static let left: Int64 = 123, right: Int64 = 124, down: Int64 = 125, up: Int64 = 126
 
-    /// Fails until the app has Accessibility permission.
+    /// Fails until the app has Accessibility permission. Safe to call again: a tap made
+    /// before permission was taken away stops working, so it's replaced.
+    @discardableResult
     func install() -> Bool {
+        if let old = tap {
+            CGEvent.tapEnable(tap: old, enable: false)
+            CFMachPortInvalidate(old)
+            tap = nil
+        }
         let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue) | (1 << CGEventType.flagsChanged.rawValue)
         guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
                                           eventsOfInterest: CGEventMask(mask), callback: { _, type, event, info in
