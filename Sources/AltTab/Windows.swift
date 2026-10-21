@@ -158,6 +158,7 @@ final class Windows {
         let info = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
         var wanted: [pid_t: Set<CGWindowID>] = [:]
         let allSpaces = windowIdsOnAllSpaces()
+        searched.formIntersection(allSpaces)
         for w in info where (w[kCGWindowLayer as String] as? Int) == 0 {
             guard let id = w[kCGWindowNumber as String] as? CGWindowID, let pid = w[kCGWindowOwnerPID as String] as? pid_t,
                   allSpaces.contains(id), regular.contains(pid), known[id] == nil, !searched.contains(id) else { continue }

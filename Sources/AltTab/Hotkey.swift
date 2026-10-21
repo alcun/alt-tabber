@@ -44,22 +44,22 @@ final class Hotkey {
                 guard key == Self.tab, event.flags.contains(.maskAlternate),
                       !event.flags.contains(.maskCommand), !event.flags.contains(.maskControl) else { return pass }
                 active = true
-                onAction(.start(backwards: shift))
+                send(.start(backwards: shift))
                 return nil
             }
             switch key {
-            case Self.tab: onAction(.move(shift ? -1 : 1))
-            case Self.down, Self.right: onAction(.move(1))
-            case Self.up, Self.left: onAction(.move(-1))
+            case Self.tab: send(.move(shift ? -1 : 1))
+            case Self.down, Self.right: send(.move(1))
+            case Self.up, Self.left: send(.move(-1))
             case Self.escape: finish(.cancel)
             case Self.enter: finish(.commit)
-            case Self.delete: onAction(.backspace)
+            case Self.delete: send(.backspace)
             default:
                 // Option changes letters (a becomes å), so read the key without modifiers.
                 if let chars = NSEvent(cgEvent: event)?.charactersIgnoringModifiers, !chars.isEmpty,
                    chars.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.union(.punctuationCharacters).union(.whitespaces).contains($0) }) {
                     searching = true
-                    onAction(.type(chars.lowercased()))
+                    send(.type(chars.lowercased()))
                 }
             }
             return nil
@@ -78,6 +78,11 @@ final class Hotkey {
 
     private func finish(_ action: Action) {
         reset()
-        onAction(action)
+        send(action)
+    }
+
+    /// Every keypress on the Mac waits for this tap, so do the work after it returns.
+    private func send(_ action: Action) {
+        DispatchQueue.main.async { [weak self] in self?.onAction(action) }
     }
 }
