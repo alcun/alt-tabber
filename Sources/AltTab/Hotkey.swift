@@ -67,6 +67,9 @@ final class Hotkey {
         }
     }
 
+    /// Stops routing keys, for when the switcher closed some other way.
+    func reset() { active = false }
+
     private func finish(_ action: Action) {
         active = false
         onAction(action)

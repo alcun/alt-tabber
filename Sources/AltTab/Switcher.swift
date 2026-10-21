@@ -2,17 +2,34 @@ import AppKit
 
 /// Ties the hotkey to the window list and the panel.
 final class Switcher {
+    /// Called when the switcher closes by itself (a mouse click), so the hotkey stops routing keys.
+    var onClose: () -> Void = {}
+
     private let panel = Panel()
+    private let windows = Windows()
     private var all: [WindowItem] = []
     private var shown: [WindowItem] = []
     private var selected = 0
     private var query = ""
     private var pendingShow: DispatchWorkItem?
 
+    init() {
+        panel.onHover = { [weak self] i in
+            guard let self, i != self.selected else { return }
+            self.selected = i
+            self.render()
+        }
+        panel.onClick = { [weak self] i in
+            self?.selected = i
+            self?.handle(.commit)
+            self?.onClose()
+        }
+    }
+
     func handle(_ action: Hotkey.Action) {
         switch action {
         case .start(let backwards):
-            all = Windows.list()
+            all = windows.list()
             query = ""
             shown = all
             // The first window is the one you're in, so start on the one before it.
@@ -35,7 +52,7 @@ final class Switcher {
         case .commit:
             let target = shown.indices.contains(selected) ? shown[selected] : nil
             close()
-            if let target { Windows.focus(target) }
+            if let target { windows.focus(target) }
         case .cancel:
             close()
         }

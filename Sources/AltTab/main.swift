@@ -9,7 +9,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setUpMenu()
+        // Don't let one frozen app stall the switcher.
+        AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 0.25)
         hotkey.onAction = { [switcher] in switcher.handle($0) }
+        switcher.onClose = { [hotkey] in hotkey.reset() }
         // Ask for Accessibility once, then wait for it to be granted.
         let trusted = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
         if !(trusted && hotkey.install()) {

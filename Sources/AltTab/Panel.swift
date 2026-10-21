@@ -3,7 +3,12 @@ import AppKit
 /// The switcher list: a floating HUD of rows (app icon, window title, app name),
 /// centred on the screen with the mouse.
 final class Panel {
+    var onHover: (Int) -> Void = { _ in }
+    var onClick: (Int) -> Void = { _ in }
+
     private let window: NSPanel
+    /// Where the mouse was when the panel opened, so a resting pointer doesn't pick a row.
+    private var mouseAtOpen = NSPoint.zero
     private let content = NSVisualEffectView()
 
     private let width: CGFloat = 560, rowHeight: CGFloat = 46, padding: CGFloat = 8, searchHeight: CGFloat = 34
@@ -16,6 +21,7 @@ final class Panel {
         window.backgroundColor = .clear
         window.hasShadow = true
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        window.acceptsMouseMovedEvents = true
         content.material = .hudWindow
         content.blendingMode = .behindWindow
         content.state = .active
@@ -48,19 +54,26 @@ final class Panel {
         }
         for i in start..<start + visible {
             y -= rowHeight
-            content.addSubview(row(items[i], selected: i == selected, frame: NSRect(x: padding, y: y, width: width - padding * 2, height: rowHeight)))
+            let row = row(items[i], selected: i == selected, frame: NSRect(x: padding, y: y, width: width - padding * 2, height: rowHeight))
+            row.onHover = { [weak self] in
+                guard let self, NSEvent.mouseLocation != self.mouseAtOpen else { return }
+                self.onHover(i)
+            }
+            row.onClick = { [weak self] in self?.onClick(i) }
+            content.addSubview(row)
         }
 
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
         let area = screen?.visibleFrame ?? .zero
+        if !window.isVisible { mouseAtOpen = NSEvent.mouseLocation }
         window.setFrame(NSRect(x: area.midX - width / 2, y: area.midY - height / 2, width: width, height: height), display: true)
         window.orderFrontRegardless()
     }
 
     func hide() { window.orderOut(nil) }
 
-    private func row(_ item: WindowItem, selected: Bool, frame: NSRect) -> NSView {
-        let row = NSView(frame: frame)
+    private func row(_ item: WindowItem, selected: Bool, frame: NSRect) -> RowView {
+        let row = RowView(frame: frame)
         row.wantsLayer = true
         row.layer?.cornerRadius = 9
         if selected { row.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.85).cgColor }
@@ -76,6 +89,7 @@ final class Panel {
 
         var detail = item.appName
         if item.minimized { detail += " · minimized" }
+        if item.otherSpace { detail += " · other Space" }
         let app = label(detail, size: 11, weight: .regular, color: selected ? NSColor.white.withAlphaComponent(0.8) : .secondaryLabelColor)
         app.frame = NSRect(x: 50, y: 6, width: frame.width - 62, height: 15)
         row.addSubview(app)
@@ -89,4 +103,24 @@ final class Panel {
         field.lineBreakMode = .byTruncatingTail
         return field
     }
+}
+
+/// A clickable row that reports hovering.
+private final class RowView: NSView {
+    var onHover: () -> Void = {}
+    var onClick: () -> Void = {}
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect], owner: self))
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    // Take clicks for the whole row, not the labels inside it.
+    override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseEntered(with event: NSEvent) { onHover() }
+    override func mouseMoved(with event: NSEvent) { onHover() }
+    override func mouseDown(with event: NSEvent) { onClick() }
 }
