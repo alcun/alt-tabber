@@ -17,7 +17,7 @@ final class Switcher {
 
     init() {
         panel.onHover = { [weak self] i in
-            guard let self, i != self.selected else { return }
+            guard let self else { return }
             self.selected = i
             self.render()
         }
@@ -61,8 +61,11 @@ final class Switcher {
             all = windows.list()
             query = ""
             shown = all
-            // The first window is the one you're in, so start on the one before it.
-            selected = shown.count > 1 ? (backwards ? shown.count - 1 : 1) : 0
+            // Start on the window before the one you're in. Going backwards starts on the
+            // oldest window, not on the apps with no windows listed after it.
+            let current = shown.first.map { !$0.windowless && $0.pid == NSWorkspace.shared.frontmostApplication?.processIdentifier } ?? false
+            let lastWindow = (shown.lastIndex { !$0.windowless } ?? shown.count - 1)
+            selected = backwards ? max(lastWindow, 0) : (current && shown.count > 1 ? 1 : 0)
             // A quick Option-Tab tap switches without flashing the panel.
             let show = DispatchWorkItem { [weak self] in self?.render() }
             pendingShow = show

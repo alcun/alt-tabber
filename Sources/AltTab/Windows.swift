@@ -21,8 +21,8 @@ enum WindowAction { case minimize, fullscreen, close, quit }
 final class Windows {
     /// Windows seen before, so ones on other Spaces can still be listed.
     private var known: [CGWindowID: (pid: pid_t, element: AXUIElement)] = [:]
-    /// Windows the background search already looked for, so it doesn't repeat itself.
-    private var searched: Set<CGWindowID> = []
+    /// How often the background search has looked for each window; it gives up after a few tries.
+    private var searched: [CGWindowID: Int] = [:]
     private var searching = false
     private var lastUsed: [CGWindowID: Int] = [:]
     private var clock = 0
@@ -125,8 +125,8 @@ final class Windows {
                 AXUIElementSetAttributeValue(item.element, "AXFullScreen" as CFString, isFull ? kCFBooleanFalse : kCFBooleanTrue)
             }
         case .close:
-            if let button = attribute(item.element, kAXCloseButtonAttribute) {
-                AXUIElementPerformAction(button as! AXUIElement, kAXPressAction as CFString)
+            if let button = element(item.element, kAXCloseButtonAttribute) {
+                AXUIElementPerformAction(button, kAXPressAction as CFString)
             }
         case .quit:
             NSRunningApplication(processIdentifier: item.pid)?.terminate()
@@ -158,14 +158,14 @@ final class Windows {
         let info = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
         var wanted: [pid_t: Set<CGWindowID>] = [:]
         let allSpaces = windowIdsOnAllSpaces()
-        searched.formIntersection(allSpaces)
+        searched = searched.filter { allSpaces.contains($0.key) }
         for w in info where (w[kCGWindowLayer as String] as? Int) == 0 {
             guard let id = w[kCGWindowNumber as String] as? CGWindowID, let pid = w[kCGWindowOwnerPID as String] as? pid_t,
-                  allSpaces.contains(id), regular.contains(pid), known[id] == nil, !searched.contains(id) else { continue }
+                  allSpaces.contains(id), regular.contains(pid), known[id] == nil, searched[id, default: 0] < 3 else { continue }
             wanted[pid, default: []].insert(id)
         }
         guard !wanted.isEmpty else { return }
-        searched.formUnion(wanted.values.joined())
+        for id in wanted.values.joined() { searched[id, default: 0] += 1 }
         searching = true
         DispatchQueue.global(qos: .utility).async {
             var found: [(CGWindowID, pid_t, AXUIElement)] = []
@@ -207,14 +207,20 @@ final class Windows {
 
     private func markFocusedWindowUsed() {
         guard let app = NSWorkspace.shared.frontmostApplication,
-              let window = attribute(AXUIElementCreateApplication(app.processIdentifier), kAXFocusedWindowAttribute) else { return }
+              let window = element(AXUIElementCreateApplication(app.processIdentifier), kAXFocusedWindowAttribute) else { return }
         var id: CGWindowID = 0
-        if _AXUIElementGetWindow(window as! AXUIElement, &id) == .success { markUsed(id) }
+        if _AXUIElementGetWindow(window, &id) == .success { markUsed(id) }
     }
 
     private func markUsed(_ id: CGWindowID) {
         clock += 1
         lastUsed[id] = clock
+    }
+
+    /// An attribute that should be an element; other apps can answer with anything.
+    private func element(_ element: AXUIElement, _ name: String) -> AXUIElement? {
+        guard let value = attribute(element, name), CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        return (value as! AXUIElement)
     }
 
     private func attribute(_ element: AXUIElement, _ name: String) -> AnyObject? {

@@ -40,6 +40,11 @@ final class Hotkey {
         case .keyDown:
             let key = event.getIntegerValueField(.keyboardEventKeycode)
             let shift = event.flags.contains(.maskShift)
+            // Option is up but we never heard it go: commit, and let this key through.
+            if active && !searching && !event.flags.contains(.maskAlternate) {
+                finish(.commit)
+                return pass
+            }
             if !active {
                 guard key == Self.tab, event.flags.contains(.maskAlternate),
                       !event.flags.contains(.maskCommand), !event.flags.contains(.maskControl) else { return pass }
