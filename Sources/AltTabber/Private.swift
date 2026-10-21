@@ -1,8 +1,13 @@
 import ApplicationServices
 
-// Private WindowServer calls. Since macOS 14 the public activate() is only a request,
-// so focusing another app's window needs these. Approach borrowed from AltTab
-// (github.com/lwouis/alt-tab-macos, GPL-3.0), which ported it from yabai/Hammerspoon.
+// Private WindowServer and Accessibility calls. Since macOS 14 the public activate() is
+// only a request, so focusing another app's window needs these, and so does finding
+// windows on other Spaces.
+//
+// The declarations, the make-key-window event layout and the brute-force window search
+// are adapted from AltTab, Copyright (C) lwouis and contributors, licensed GPL-3.0:
+// https://github.com/lwouis/alt-tab-macos. AltTab ported parts of them from yabai and
+// Hammerspoon.
 
 @_silgen_name("_AXUIElementGetWindow") @discardableResult
 func _AXUIElementGetWindow(_ element: AXUIElement, _ wid: UnsafeMutablePointer<CGWindowID>) -> AXError

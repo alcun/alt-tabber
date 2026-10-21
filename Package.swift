@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "AltTab",
+    name: "AltTabber",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "AltTab",
-            path: "Sources/AltTab",
+            name: "AltTabber",
+            path: "Sources/AltTabber",
             linkerSettings: [.unsafeFlags(["-F/System/Library/PrivateFrameworks", "-framework", "SkyLight"])]
         ),
     ]

@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setUpMenu() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "rectangle.stack", accessibilityDescription: "AltTab")
+        item.button?.image = NSImage(systemSymbolName: "rectangle.stack", accessibilityDescription: "alt-tabber")
         let menu = NSMenu()
         menu.addItem(withTitle: "Option-Tab to switch windows", action: nil, keyEquivalent: "").isEnabled = false
         menu.addItem(.separator())
@@ -32,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         login.target = self
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         loginItem = login
-        menu.addItem(withTitle: "Quit AltTab", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit alt-tabber", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
         statusItem = item
     }
