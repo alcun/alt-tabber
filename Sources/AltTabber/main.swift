@@ -3,7 +3,9 @@ import ServiceManagement
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let hotkey = Hotkey()
-    private let switcher = Switcher()
+    /// Made once permission is granted: reading windows before that makes macOS
+    /// put up its own alert, on top of the welcome window.
+    private var switcher: Switcher?
     private let welcome = Welcome()
     private var statusItem: NSStatusItem?
     private var permissionItem: NSMenuItem?
@@ -19,12 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         // Don't let one frozen app stall the switcher.
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 0.25)
-        hotkey.onAction = { [switcher] in switcher.handle($0) }
-        switcher.onClose = { [hotkey] in hotkey.reset() }
         setUpMenu()
 
         trusted = AXIsProcessTrusted()
-        if trusted { hotkey.install() }
+        if trusted { start() }
         if !trusted || !UserDefaults.standard.bool(forKey: "welcomed") { welcome.show() }
         // Permission can be granted or taken away at any time; follow it.
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.checkPermission() }
@@ -42,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard now != trusted else { return }
         trusted = now
         if now {
-            hotkey.install()
+            start()
             if !UserDefaults.standard.bool(forKey: "welcomed") {
                 UserDefaults.standard.set(true, forKey: "welcomed")
                 setOpenAtLogin(true)
@@ -50,6 +50,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         welcome.refresh()
         updateIcon()
+    }
+
+    private func start() {
+        if switcher == nil {
+            let switcher = Switcher()
+            hotkey.onAction = { [switcher] in switcher.handle($0) }
+            switcher.onClose = { [hotkey] in hotkey.reset() }
+            self.switcher = switcher
+        }
+        hotkey.install()
     }
 
     private func setUpMenu() {

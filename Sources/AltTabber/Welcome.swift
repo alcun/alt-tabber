@@ -18,6 +18,7 @@ final class Welcome: NSObject {
         refresh()
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
+        window?.orderFrontRegardless() // macOS may refuse to activate us; show it anyway
     }
 
     /// Called when permission changes, so the window flips to "ready" while you watch.
@@ -81,12 +82,21 @@ final class Welcome: NSObject {
     }
 
     @objc private func openSettings() {
-        // Asking puts alt-tabber in the list. System Settings doesn't refresh an open list,
-        // so restart it first, or alt-tabber won't be there to turn on.
+        // System Settings doesn't refresh an open list, so restart it, or alt-tabber
+        // won't be there to turn on.
         let running = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.systempreferences")
         running.forEach { $0.terminate() }
-        _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
-        DispatchQueue.main.asyncAfter(deadline: .now() + (running.isEmpty ? 0 : 1)) {
+        let delay: TimeInterval = running.isEmpty ? 0 : 1
+        // The first time, macOS's own alert adds alt-tabber to the list and links to it.
+        // It only shows once, so after that, open the list ourselves.
+        if !UserDefaults.standard.bool(forKey: "asked") {
+            UserDefaults.standard.set(true, forKey: "asked")
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+            }
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
         }
     }
