@@ -24,8 +24,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setUpMenu()
 
         trusted = AXIsProcessTrusted()
-        if trusted { start() }
-        if !trusted || !UserDefaults.standard.bool(forKey: "welcomed") { welcome.show() }
+        if trusted {
+            start()
+            finishSetup()
+        } else {
+            welcome.show()
+        }
         // Permission can be granted or taken away at any time; follow it.
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.checkPermission() }
         updateIcon()
@@ -43,13 +47,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         trusted = now
         if now {
             start()
-            if !UserDefaults.standard.bool(forKey: "welcomed") {
-                UserDefaults.standard.set(true, forKey: "welcomed")
-                setOpenAtLogin(true)
-            }
+            finishSetup()
+        } else {
+            // Permission was taken away: the keyboard hook is dead, so drop any open switcher.
+            switcher?.handle(.cancel)
+            hotkey.reset()
         }
         welcome.refresh()
         updateIcon()
+    }
+
+    /// The first time it has permission, however that happened: open at login, and say it's ready.
+    private func finishSetup() {
+        guard !UserDefaults.standard.bool(forKey: "welcomed") else { return }
+        UserDefaults.standard.set(true, forKey: "welcomed")
+        setOpenAtLogin(true)
+        welcome.show()
     }
 
     private func start() {

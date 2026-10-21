@@ -7,7 +7,8 @@ set -e
 cd "$(dirname "$0")"
 VERSION=$(plutil -extract CFBundleShortVersionString raw Info.plist)
 PROFILE="${NOTARY_PROFILE:-heyra}"
-TAP=../homebrew-tap/Casks/alt-tabber.rb
+TAPDIR=../homebrew-tap
+TAP=$TAPDIR/Casks/alt-tabber.rb
 [[ -z $(git status --porcelain) ]] || { echo "commit first"; exit 1; }
 
 SIGN_ID="${SIGN_ID:-Developer ID Application}" ./build.sh --no-install
@@ -32,7 +33,7 @@ gh release create "v$VERSION" "$OUT/AltTabber.zip" --title "alt-tabber $VERSION"
 
 SHA=$(shasum -a 256 "$OUT/AltTabber.zip" | cut -d' ' -f1)
 sed -i '' -e "s/^  version \".*\"/  version \"$VERSION\"/" -e "s/^  sha256 \".*\"/  sha256 \"$SHA\"/" "$TAP"
-git -C "$(dirname "$TAP")" add Casks/alt-tabber.rb
-git -C "$(dirname "$TAP")" commit -qm "alt-tabber $VERSION"
-git -C "$(dirname "$TAP")" push -q
+git -C "$TAPDIR" add Casks/alt-tabber.rb README.md
+git -C "$TAPDIR" commit -qm "alt-tabber $VERSION"
+git -C "$TAPDIR" push -q
 echo "Released $VERSION: brew upgrade --cask alt-tabber"

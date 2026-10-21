@@ -88,18 +88,23 @@ final class Welcome: NSObject {
         // won't be there to turn on.
         let running = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.systempreferences")
         running.forEach { $0.terminate() }
-        let delay: TimeInterval = running.isEmpty ? 0 : 1
-        // The first time, macOS's own alert adds alt-tabber to the list and links to it.
-        // It only shows once, so after that, open the list ourselves.
-        if !UserDefaults.standard.bool(forKey: "asked") {
-            UserDefaults.standard.set(true, forKey: "asked")
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+        whenQuit(running, tries: 30) {
+            // The first time, macOS's own alert adds alt-tabber to the list and links to it.
+            // It only shows once, so after that, open the list ourselves.
+            if !UserDefaults.standard.bool(forKey: "asked") {
+                UserDefaults.standard.set(true, forKey: "asked")
                 _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+            } else {
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
             }
-            return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+    }
+
+    /// Runs `then` once the apps have quit, checking every 0.1s for up to `tries` times.
+    private func whenQuit(_ apps: [NSRunningApplication], tries: Int, then: @escaping () -> Void) {
+        guard tries > 0, apps.contains(where: { !$0.isTerminated }) else { return then() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.whenQuit(apps, tries: tries - 1, then: then)
         }
     }
 
@@ -113,5 +118,7 @@ final class Welcome: NSObject {
 
 func setOpenAtLogin(_ on: Bool) {
     let service = SMAppService.mainApp
+    // Switched off in System Settings, macOS wants it switched back on there.
+    if on && service.status == .requiresApproval { return SMAppService.openSystemSettingsLoginItems() }
     try? on ? service.register() : service.unregister()
 }
