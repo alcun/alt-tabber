@@ -24,6 +24,8 @@ final class Windows {
     private var searching = false
     private var lastUsed: [CGWindowID: Int] = [:]
     private var clock = 0
+    /// One per app, telling us when its focused window changes.
+    private var observers: [pid_t: AXObserver] = [:]
 
     init() {
         let center = NSWorkspace.shared.notificationCenter
@@ -31,12 +33,16 @@ final class Windows {
             // Give apps a moment to report the new Space's windows.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { _ = self?.currentSpaceWindows() }
         }
-        center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
+        center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            if let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication { self?.observe(app.processIdentifier) }
             self?.markFocusedWindowUsed()
         }
         center.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] note in
             guard let pid = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.processIdentifier else { return }
             self?.known = self?.known.filter { $0.value.pid != pid } ?? [:]
+            if let observer = self?.observers.removeValue(forKey: pid) {
+                CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
+            }
         }
         _ = currentSpaceWindows()
         searchOtherSpaces()
@@ -44,6 +50,8 @@ final class Windows {
 
     /// Every window, most recently used first.
     func list() -> [WindowItem] {
+        // Retried each time, as it fails before permission is granted or while an app is starting.
+        for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular { observe(app.processIdentifier) }
         markFocusedWindowUsed()
         // The WindowServer lists on-screen windows front to back, which breaks ties in recency.
         let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
@@ -62,6 +70,7 @@ final class Windows {
             else { known[id] = nil } // closed
         }
         searchOtherSpaces()
+        lastUsed = lastUsed.filter { known[$0.key] != nil }
 
         return items.values.sorted { a, b in
             let (ua, ub) = (lastUsed[a.id] ?? 0, lastUsed[b.id] ?? 0)
@@ -159,6 +168,20 @@ final class Windows {
         return WindowItem(id: id, pid: pid, title: (title as? String).flatMap { $0.isEmpty ? nil : $0 } ?? appName,
                           appName: appName, icon: app.icon, element: element, minimized: minimized,
                           otherSpace: otherSpace && !minimized && !app.isHidden)
+    }
+
+    private func observe(_ pid: pid_t) {
+        guard observers[pid] == nil else { return }
+        var observer: AXObserver?
+        guard AXObserverCreate(pid, { _, window, _, context in
+            let me = Unmanaged<Windows>.fromOpaque(context!).takeUnretainedValue()
+            var id: CGWindowID = 0
+            if _AXUIElementGetWindow(window, &id) == .success, id != 0 { me.markUsed(id) }
+        }, &observer) == .success, let observer,
+              AXObserverAddNotification(observer, AXUIElementCreateApplication(pid), kAXFocusedWindowChangedNotification as CFString,
+                                        Unmanaged.passUnretained(self).toOpaque()) == .success else { return }
+        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
+        observers[pid] = observer
     }
 
     private func markFocusedWindowUsed() {
