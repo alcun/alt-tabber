@@ -15,7 +15,9 @@ final class Panel {
     private let content = NSVisualEffectView()
 
     private let width: CGFloat = 560, rowHeight: CGFloat = 46, padding: CGFloat = 8, searchHeight: CGFloat = 34
-    private let maxRows = 12
+    private let arrowHeight: CGFloat = 12
+    /// First visible row. Only moves when the selection would leave the view.
+    private var scrollStart = 0
 
     init() {
         window = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -36,12 +38,24 @@ final class Panel {
 
     func show(_ items: [WindowItem], selected: Int, query: String) {
         content.subviews.forEach { $0.removeFromSuperview() }
-        let visible = min(items.count, maxRows)
+        let opening = !window.isVisible
+        if opening {
+            mouseAtOpen = NSEvent.mouseLocation
+            hovered = nil
+            scrollStart = 0
+        }
+        let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
+        let area = screen?.visibleFrame ?? .zero
         let showSearch = !query.isEmpty
-        // Scroll so the selection stays in view.
-        let start = max(0, min(selected - visible / 2, items.count - visible))
+
+        // As many rows as fit in most of the screen.
+        let room = area.height * 0.85 - padding * 2 - searchHeight - arrowHeight * 2
+        let visible = min(items.count, max(3, Int(room / rowHeight)))
+        if selected < scrollStart { scrollStart = selected }
+        if selected >= scrollStart + visible { scrollStart = selected - visible + 1 }
+        scrollStart = max(0, min(scrollStart, items.count - visible))
+        let start = scrollStart
         let moreAbove = start > 0, moreBelow = start + visible < items.count
-        let arrowHeight: CGFloat = 12
         let height = padding * 2 + CGFloat(max(visible, 1)) * rowHeight + (showSearch ? searchHeight : 0)
             + (moreAbove ? arrowHeight : 0) + (moreBelow ? arrowHeight : 0)
 
@@ -77,12 +91,6 @@ final class Panel {
         }
         if moreBelow { content.addSubview(arrow("chevron.down", y: y - arrowHeight - 1)) }
 
-        let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
-        let area = screen?.visibleFrame ?? .zero
-        if !window.isVisible {
-            mouseAtOpen = NSEvent.mouseLocation
-            hovered = nil
-        }
         window.setFrame(NSRect(x: area.midX - width / 2, y: area.midY - height / 2, width: width, height: height), display: true)
         window.orderFrontRegardless()
     }
