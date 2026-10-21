@@ -12,6 +12,8 @@ struct WindowItem {
     let otherSpace: Bool
 }
 
+enum WindowAction { case minimize, fullscreen, close, quit }
+
 /// Knows every window across Spaces and the order you last used them in.
 /// Lives on the main thread; only the brute-force search runs in the background.
 final class Windows {
@@ -81,6 +83,26 @@ final class Windows {
         _SLPSSetFrontProcessWithOptions(&psn, item.id, userGeneratedMode)
         makeKeyWindow(&psn, item.id)
         AXUIElementPerformAction(item.element, kAXRaiseAction as CFString)
+    }
+
+    func perform(_ action: WindowAction, on item: WindowItem) {
+        switch action {
+        case .minimize:
+            AXUIElementSetAttributeValue(item.element, kAXMinimizedAttribute as CFString, item.minimized ? kCFBooleanFalse : kCFBooleanTrue)
+        case .fullscreen:
+            focus(item)
+            let isFull = attribute(item.element, "AXFullScreen") as? Bool ?? false
+            // Let the window arrive before changing it, or macOS can ignore the request.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                AXUIElementSetAttributeValue(item.element, "AXFullScreen" as CFString, isFull ? kCFBooleanFalse : kCFBooleanTrue)
+            }
+        case .close:
+            if let button = attribute(item.element, kAXCloseButtonAttribute) {
+                AXUIElementPerformAction(button as! AXUIElement, kAXPressAction as CFString)
+            }
+        case .quit:
+            NSRunningApplication(processIdentifier: item.pid)?.terminate()
+        }
     }
 
     /// Windows the Accessibility API reports: the current Space, plus minimized and hidden ones.

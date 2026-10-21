@@ -5,10 +5,13 @@ import AppKit
 final class Panel {
     var onHover: (Int) -> Void = { _ in }
     var onClick: (Int) -> Void = { _ in }
+    var onAction: (Int, WindowAction) -> Void = { _, _ in }
 
     private let window: NSPanel
     /// Where the mouse was when the panel opened, so a resting pointer doesn't pick a row.
     private var mouseAtOpen = NSPoint.zero
+    /// The row under the mouse, which shows the window buttons.
+    private var hovered: Int?
     private let content = NSVisualEffectView()
 
     private let width: CGFloat = 560, rowHeight: CGFloat = 46, padding: CGFloat = 8, searchHeight: CGFloat = 34
@@ -54,25 +57,31 @@ final class Panel {
         }
         for i in start..<start + visible {
             y -= rowHeight
-            let row = row(items[i], selected: i == selected, frame: NSRect(x: padding, y: y, width: width - padding * 2, height: rowHeight))
+            let row = row(items[i], selected: i == selected, buttons: i == hovered,
+                          frame: NSRect(x: padding, y: y, width: width - padding * 2, height: rowHeight))
             row.onHover = { [weak self] in
-                guard let self, NSEvent.mouseLocation != self.mouseAtOpen else { return }
+                guard let self, NSEvent.mouseLocation != self.mouseAtOpen, self.hovered != i else { return }
+                self.hovered = i
                 self.onHover(i)
             }
             row.onClick = { [weak self] in self?.onClick(i) }
+            row.onAction = { [weak self] action in self?.onAction(i, action) }
             content.addSubview(row)
         }
 
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
         let area = screen?.visibleFrame ?? .zero
-        if !window.isVisible { mouseAtOpen = NSEvent.mouseLocation }
+        if !window.isVisible {
+            mouseAtOpen = NSEvent.mouseLocation
+            hovered = nil
+        }
         window.setFrame(NSRect(x: area.midX - width / 2, y: area.midY - height / 2, width: width, height: height), display: true)
         window.orderFrontRegardless()
     }
 
     func hide() { window.orderOut(nil) }
 
-    private func row(_ item: WindowItem, selected: Bool, frame: NSRect) -> RowView {
+    private func row(_ item: WindowItem, selected: Bool, buttons: Bool, frame: NSRect) -> RowView {
         let row = RowView(frame: frame)
         row.wantsLayer = true
         row.layer?.cornerRadius = 9
@@ -83,16 +92,38 @@ final class Panel {
         row.addSubview(icon)
 
         let textColor: NSColor = selected ? .white : .labelColor
+        // Leave room for the buttons when they show.
+        let textWidth = frame.width - 62 - (buttons ? 4 * 24 : 0)
         let title = label(item.title, size: 13, weight: .medium, color: textColor)
-        title.frame = NSRect(x: 50, y: 22, width: frame.width - 62, height: 18)
+        title.frame = NSRect(x: 50, y: 22, width: textWidth, height: 18)
         row.addSubview(title)
 
         var detail = item.appName
         if item.minimized { detail += " · minimized" }
         if item.otherSpace { detail += " · other Space" }
         let app = label(detail, size: 11, weight: .regular, color: selected ? NSColor.white.withAlphaComponent(0.8) : .secondaryLabelColor)
-        app.frame = NSRect(x: 50, y: 6, width: frame.width - 62, height: 15)
+        app.frame = NSRect(x: 50, y: 6, width: textWidth, height: 15)
         row.addSubview(app)
+
+        if buttons {
+            let actions: [(WindowAction, String, String)] = [
+                (.minimize, "minus", item.minimized ? "Restore" : "Minimize"),
+                (.fullscreen, "arrow.up.left.and.arrow.down.right", "Full Screen"),
+                (.close, "xmark", "Close Window"),
+                (.quit, "power", "Quit \(item.appName)"),
+            ]
+            var x = frame.width - 8 - CGFloat(actions.count) * 24
+            for (action, symbol, help) in actions {
+                let button = ActionButton(frame: NSRect(x: x, y: 12, width: 22, height: 22))
+                button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: help)?
+                    .withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
+                button.toolTip = help
+                button.contentTintColor = selected ? .white : .secondaryLabelColor
+                button.onPress = { [weak row] in row?.onAction(action) }
+                row.addSubview(button)
+                x += 24
+            }
+        }
         return row
     }
 
@@ -109,6 +140,7 @@ final class Panel {
 private final class RowView: NSView {
     var onHover: () -> Void = {}
     var onClick: () -> Void = {}
+    var onAction: (WindowAction) -> Void = { _ in }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -117,10 +149,36 @@ private final class RowView: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    // Take clicks for the whole row, not the labels inside it.
-    override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
+    // Take clicks for the whole row, not the labels inside it, except the buttons.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard frame.contains(point) else { return nil }
+        return super.hitTest(point) as? ActionButton ?? self
+    }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseEntered(with event: NSEvent) { onHover() }
     override func mouseMoved(with event: NSEvent) { onHover() }
     override func mouseDown(with event: NSEvent) { onClick() }
+}
+
+/// A small round icon button that lights up under the mouse.
+private final class ActionButton: NSButton {
+    var onPress: () -> Void = {}
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        isBordered = false
+        imagePosition = .imageOnly
+        wantsLayer = true
+        layer?.cornerRadius = frame.height / 2
+        target = self
+        action = #selector(press)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseEntered(with event: NSEvent) { layer?.backgroundColor = NSColor.white.withAlphaComponent(0.25).cgColor }
+    override func mouseExited(with event: NSEvent) { layer?.backgroundColor = nil }
+    @objc private func press() { onPress() }
 }

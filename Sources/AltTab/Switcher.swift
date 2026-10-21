@@ -24,6 +24,33 @@ final class Switcher {
             self?.handle(.commit)
             self?.onClose()
         }
+        panel.onAction = { [weak self] i, action in self?.perform(action, on: i) }
+    }
+
+    /// The buttons on a hovered row. Fullscreen switches to the window; the rest keep the list open.
+    private func perform(_ action: WindowAction, on index: Int) {
+        guard shown.indices.contains(index) else { return }
+        let item = shown[index]
+        if action == .fullscreen {
+            close()
+            onClose()
+            windows.perform(action, on: item)
+            return
+        }
+        windows.perform(action, on: item)
+        switch action {
+        case .close: all.removeAll { $0.id == item.id }
+        case .quit: all.removeAll { $0.pid == item.pid }
+        default: break
+        }
+        refilter(keeping: index)
+        // Pick up the window's new state once the app has reacted.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self, !self.all.isEmpty else { return }
+            let remaining = Set(self.all.map(\.id))
+            self.all = self.windows.list().filter { remaining.contains($0.id) }
+            self.refilter(keeping: self.selected)
+        }
     }
 
     func handle(_ action: Hotkey.Action) {
@@ -59,13 +86,15 @@ final class Switcher {
     }
 
     /// Search by typing: every word must appear in the window title or app name.
-    private func filter() {
+    private func filter() { refilter(keeping: 0) }
+
+    private func refilter(keeping index: Int) {
         let words = query.split(separator: " ").map(String.init)
         shown = words.isEmpty ? all : all.filter { item in
             let haystack = "\(item.title) \(item.appName)".lowercased()
             return words.allSatisfy { haystack.contains($0) }
         }
-        selected = 0
+        selected = min(index, max(shown.count - 1, 0))
         render()
     }
 
