@@ -9,3 +9,5 @@ First public release.
 - Search by typing; let go of Option to keep typing, Enter to switch.
 - Mouse: hover to select, click to switch, and buttons to minimize, go full screen, close or quit.
 - The list fits the screen and only scrolls at its edges.
+- A welcome window walks you through the one permission it needs, then opens at login.
+- Runs on Apple silicon and Intel.

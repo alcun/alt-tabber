@@ -12,9 +12,11 @@ Cmd-Tab switches apps. alt-tabber switches **windows**: every window of every ap
 brew install --cask alcun/tap/alt-tabber
 ```
 
-Open it, then allow it in **System Settings → Privacy & Security → Accessibility**. It starts working straight away. A stack icon in the menu bar has **Launch at Login** and **Quit**.
+Open alt-tabber and click **Open Accessibility Settings**. Turn alt-tabber on, and it's ready: no restart. It opens at login from then on.
 
-Needs macOS 14 or later on Apple silicon.
+To get back to it later, open alt-tabber again, or use the stack icon in the menu bar. That's where **Open at Login**, **About** and **Quit** live.
+
+Needs macOS 14 or later, on Apple silicon or Intel.
 
 ## Use
 
