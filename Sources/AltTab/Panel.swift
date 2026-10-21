@@ -109,12 +109,12 @@ final class Panel {
 
         let textColor: NSColor = selected ? .white : .labelColor
         // Leave room for the buttons when they show.
-        let textWidth = frame.width - 62 - (buttons ? 4 * 24 : 0)
+        let textWidth = frame.width - 62 - (buttons ? CGFloat(item.windowless ? 1 : 4) * 24 : 0)
         let title = label(item.title, size: 13, weight: .medium, color: textColor)
         title.frame = NSRect(x: 50, y: 22, width: textWidth, height: 18)
         row.addSubview(title)
 
-        var detail = item.appName
+        var detail = item.windowless ? "No open windows" : item.appName
         if item.minimized { detail += " · minimized" }
         if item.otherSpace { detail += " · other Space" }
         let app = label(detail, size: 11, weight: .regular, color: selected ? NSColor.white.withAlphaComponent(0.8) : .secondaryLabelColor)
@@ -122,11 +122,12 @@ final class Panel {
         row.addSubview(app)
 
         if buttons {
-            let actions: [(WindowAction, String, String)] = [
+            let quit: (WindowAction, String, String) = (.quit, "power", "Quit \(item.appName)")
+            let actions: [(WindowAction, String, String)] = item.windowless ? [quit] : [
                 (.minimize, "minus", item.minimized ? "Restore" : "Minimize"),
                 (.fullscreen, "arrow.up.left.and.arrow.down.right", "Full Screen"),
                 (.close, "xmark", "Close Window"),
-                (.quit, "power", "Quit \(item.appName)"),
+                quit,
             ]
             var x = frame.width - 8 - CGFloat(actions.count) * 24
             for (action, symbol, help) in actions {

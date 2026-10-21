@@ -10,6 +10,8 @@ struct WindowItem {
     let element: AXUIElement
     let minimized: Bool
     let otherSpace: Bool
+    /// A running app with no open windows, listed like Cmd-Tab does.
+    var windowless = false
 }
 
 enum WindowAction { case minimize, fullscreen, close, quit }
@@ -72,16 +74,32 @@ final class Windows {
         searchOtherSpaces()
         lastUsed = lastUsed.filter { known[$0.key] != nil }
 
-        return items.values.sorted { a, b in
+        let sorted = items.values.sorted { a, b in
             let (ua, ub) = (lastUsed[a.id] ?? 0, lastUsed[b.id] ?? 0)
             if ua != ub { return ua > ub }
             return (onScreen[a.id] ?? Int.max) < (onScreen[b.id] ?? Int.max)
         }
+        let withWindows = Set(sorted.map(\.pid))
+        let windowless = NSWorkspace.shared.runningApplications.filter {
+            $0.activationPolicy == .regular && !withWindows.contains($0.processIdentifier)
+        }.map { app in
+            let name = app.localizedName ?? ""
+            return WindowItem(id: 0, pid: app.processIdentifier, title: name, appName: name, icon: app.icon,
+                              element: AXUIElementCreateApplication(app.processIdentifier), minimized: false,
+                              otherSpace: false, windowless: true)
+        }
+        return sorted + windowless
     }
 
     /// Focus steps from AltTab: front the process with this window, make it key, raise it.
     /// Fronting a window on another Space makes macOS switch to that Space.
     func focus(_ item: WindowItem) {
+        if item.windowless {
+            // Like clicking it in the Dock, so the app opens a window if it wants to.
+            guard let url = NSRunningApplication(processIdentifier: item.pid)?.bundleURL else { return }
+            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+            return
+        }
         markUsed(item.id)
         if item.minimized {
             AXUIElementSetAttributeValue(item.element, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
@@ -95,6 +113,7 @@ final class Windows {
     }
 
     func perform(_ action: WindowAction, on item: WindowItem) {
+        guard !item.windowless || action == .quit else { return }
         switch action {
         case .minimize:
             AXUIElementSetAttributeValue(item.element, kAXMinimizedAttribute as CFString, item.minimized ? kCFBooleanFalse : kCFBooleanTrue)
@@ -161,8 +180,9 @@ final class Windows {
 
     private func makeItem(_ id: CGWindowID, _ pid: pid_t, _ element: AXUIElement, otherSpace: Bool) -> WindowItem? {
         guard let app = NSRunningApplication(processIdentifier: pid) else { return nil }
+        // Some apps (Brave web apps like X) fail to give a title; only a dead window is dropped.
         var title: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &title) == .success else { return nil }
+        guard AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &title) != .invalidUIElement else { return nil }
         let minimized = attribute(element, kAXMinimizedAttribute) as? Bool ?? false
         let appName = app.localizedName ?? ""
         return WindowItem(id: id, pid: pid, title: (title as? String).flatMap { $0.isEmpty ? nil : $0 } ?? appName,
