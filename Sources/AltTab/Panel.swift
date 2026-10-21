@@ -38,11 +38,18 @@ final class Panel {
         content.subviews.forEach { $0.removeFromSuperview() }
         let visible = min(items.count, maxRows)
         let showSearch = !query.isEmpty
-        let height = padding * 2 + CGFloat(max(visible, 1)) * rowHeight + (showSearch ? searchHeight : 0)
-
         // Scroll so the selection stays in view.
         let start = max(0, min(selected - visible / 2, items.count - visible))
+        let moreAbove = start > 0, moreBelow = start + visible < items.count
+        let arrowHeight: CGFloat = 12
+        let height = padding * 2 + CGFloat(max(visible, 1)) * rowHeight + (showSearch ? searchHeight : 0)
+            + (moreAbove ? arrowHeight : 0) + (moreBelow ? arrowHeight : 0)
+
         var y = height - padding
+        if moreAbove {
+            y -= arrowHeight
+            content.addSubview(arrow("chevron.up", y: y + 1))
+        }
         if showSearch {
             y -= searchHeight
             let search = label("Search: \(query)", size: 14, weight: .semibold, color: .secondaryLabelColor)
@@ -68,6 +75,7 @@ final class Panel {
             row.onAction = { [weak self] action in self?.onAction(i, action) }
             content.addSubview(row)
         }
+        if moreBelow { content.addSubview(arrow("chevron.down", y: y - arrowHeight - 1)) }
 
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
         let area = screen?.visibleFrame ?? .zero
@@ -125,6 +133,15 @@ final class Panel {
             }
         }
         return row
+    }
+
+    /// A small chevron showing there are more windows out of view.
+    private func arrow(_ symbol: String, y: CGFloat) -> NSImageView {
+        let view = NSImageView(frame: NSRect(x: width / 2 - 10, y: y, width: 20, height: 12))
+        view.image = NSImage(systemSymbolName: symbol, accessibilityDescription: "More windows")?
+            .withSymbolConfiguration(.init(pointSize: 10, weight: .bold))
+        view.contentTintColor = .secondaryLabelColor
+        return view
     }
 
     private func label(_ text: String, size: CGFloat, weight: NSFont.Weight, color: NSColor) -> NSTextField {
