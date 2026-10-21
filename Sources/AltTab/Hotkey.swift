@@ -1,13 +1,15 @@
 import AppKit
 
 /// Watches the keyboard with an event tap: Option-Tab opens the switcher, and while it is
-/// open every key is swallowed and routed here. Releasing Option commits.
+/// open every key is swallowed and routed here. Releasing Option commits, unless you've
+/// started typing a search: then Enter commits, so you can let go of Option to type.
 final class Hotkey {
     enum Action { case start(backwards: Bool), move(Int), type(String), backspace, commit, cancel }
 
     var onAction: (Action) -> Void = { _ in }
     private var tap: CFMachPort?
     private var active = false
+    private var searching = false
 
     private static let tab: Int64 = 48, escape: Int64 = 53, enter: Int64 = 36, delete: Int64 = 51
     private static let left: Int64 = 123, right: Int64 = 124, down: Int64 = 125, up: Int64 = 126
@@ -33,7 +35,7 @@ final class Hotkey {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return pass
         case .flagsChanged:
-            if active && !event.flags.contains(.maskAlternate) { finish(.commit) }
+            if active && !searching && !event.flags.contains(.maskAlternate) { finish(.commit) }
             return pass
         case .keyDown:
             let key = event.getIntegerValueField(.keyboardEventKeycode)
@@ -56,6 +58,7 @@ final class Hotkey {
                 // Option changes letters (a becomes å), so read the key without modifiers.
                 if let chars = NSEvent(cgEvent: event)?.charactersIgnoringModifiers, !chars.isEmpty,
                    chars.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.union(.punctuationCharacters).union(.whitespaces).contains($0) }) {
+                    searching = true
                     onAction(.type(chars.lowercased()))
                 }
             }
@@ -68,10 +71,13 @@ final class Hotkey {
     }
 
     /// Stops routing keys, for when the switcher closed some other way.
-    func reset() { active = false }
+    func reset() {
+        active = false
+        searching = false
+    }
 
     private func finish(_ action: Action) {
-        active = false
+        reset()
         onAction(action)
     }
 }

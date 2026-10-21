@@ -66,7 +66,7 @@ final class Panel {
         }
         if showSearch {
             y -= searchHeight
-            let search = label("Search: \(query)", size: 14, weight: .semibold, color: .secondaryLabelColor)
+            let search = label("Search: \(query)    ↩ to switch", size: 14, weight: .semibold, color: .secondaryLabelColor)
             search.frame = NSRect(x: padding + 12, y: y + 8, width: width - padding * 2 - 24, height: 20)
             content.addSubview(search)
         }

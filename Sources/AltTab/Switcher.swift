@@ -12,6 +12,8 @@ final class Switcher {
     private var selected = 0
     private var query = ""
     private var pendingShow: DispatchWorkItem?
+    /// Closes the list when you click anywhere else.
+    private var clickMonitor: Any?
 
     init() {
         panel.onHover = { [weak self] i in
@@ -101,6 +103,12 @@ final class Switcher {
     private func render() {
         pendingShow?.cancel()
         pendingShow = nil
+        if clickMonitor == nil {
+            clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                self?.close()
+                self?.onClose()
+            }
+        }
         panel.show(shown, selected: selected, query: query)
     }
 
@@ -108,6 +116,8 @@ final class Switcher {
         pendingShow?.cancel()
         pendingShow = nil
         panel.hide()
+        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
+        clickMonitor = nil
         all = []
         shown = []
     }
