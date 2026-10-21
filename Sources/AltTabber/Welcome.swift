@@ -33,7 +33,6 @@ final class Welcome: NSObject {
         login.isHidden = !trusted
         done.isHidden = !trusted
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
-        window?.defaultButtonCell = (trusted ? done : allow).cell as? NSButtonCell
     }
 
     private func build() {
@@ -56,6 +55,9 @@ final class Welcome: NSObject {
             button.controlSize = .large
             button.target = self
         }
+        // Return presses whichever button is showing, and it draws as the blue default.
+        allow.keyEquivalent = "\r"
+        done.keyEquivalent = "\r"
         allow.action = #selector(openSettings)
         done.action = #selector(close)
         login.target = self
