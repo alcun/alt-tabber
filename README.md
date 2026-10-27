@@ -54,12 +54,12 @@ This builds `AltTabber.app` and installs it to `~/Applications`. It's signed ad 
 
 ## How it works
 
-About 800 lines of Swift in [`Sources/AltTabber`](Sources/AltTabber):
+About 1,000 lines of Swift in [`Sources/AltTabber`](Sources/AltTabber):
 
 - `Hotkey.swift` is a keyboard event tap for Option-Tab. It never blocks your typing.
 - `Windows.swift` lists windows and tracks the order you used them in.
 - `Panel.swift` draws the list. `Switcher.swift` ties them together.
-- `Private.swift` holds the private macOS calls.
+- `Private.swift` holds the private macOS calls. `Welcome.swift` is the first-run window.
 
 macOS has no public way to focus another app's window reliably, or to see windows on other Spaces. alt-tabber uses private WindowServer and Accessibility calls for both, so a macOS update could break it. It can't go in the App Store for the same reason.
 
